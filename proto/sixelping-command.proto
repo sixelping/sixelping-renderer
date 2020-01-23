@@ -1,0 +1,42 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+
+service SixelpingRenderer {
+  rpc NewDeltaImage (NewDeltaImageRequest) returns (google.protobuf.Empty) {}
+  rpc GetCanvasParameters (google.protobuf.Empty) returns (CanvasParametersResponse) {}
+  rpc MetricsUpdate (MetricsDatapoint) returns (google.protobuf.Empty) {}
+  rpc GetRenderedImage (google.protobuf.Empty) returns (RenderedImageResponse) {}
+}
+
+message NewDeltaImageRequest {
+  bytes image = 1;
+}
+
+message RenderedImageResponse {
+  bytes image = 1;
+}
+
+message CanvasParametersResponse {
+  uint32 width = 1;
+  uint32 height = 2;
+  uint32 fps = 3;
+}
+
+//Message to send metrics out
+message MetricsDatapoint {
+  message Entry {
+    message Label {
+      string name = 1;
+      string value = 2;
+    }
+    string name = 1;
+    oneof oo {
+      uint64 value_u64 = 2;
+      double value_dbl = 3;
+      string value_str = 4;
+    }
+    repeated Label label = 5;
+  }
+
+  repeated Entry entry = 1;
+}
