@@ -24,19 +24,8 @@ message CanvasParametersResponse {
 
 //Message to send metrics out
 message MetricsDatapoint {
-  message Entry {
-    message Label {
-      string name = 1;
-      string value = 2;
-    }
-    string name = 1;
-    oneof oo {
-      uint64 value_u64 = 2;
-      double value_dbl = 3;
-      string value_str = 4;
-    }
-    repeated Label label = 5;
-  }
-
-  repeated Entry entry = 1;
+  uint64 ipackets = 1;
+  uint64 opackets = 2;
+  uint64 dpackets = 3;
+  string mac = 4;
 }
