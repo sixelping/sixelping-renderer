@@ -34,7 +34,24 @@ var promDeltasReceived = promauto.NewCounter(prometheus.CounterOpts{
 	Name: "renderer_deltas_received_total",
 	Help: "Total number of received deltas",
 })
-var dynamicProm = make(map[string]*prometheus.GaugeVec)
+var promPacketsReceived = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "receiver_packets_received",
+	Help: "Total number of packets received",
+},
+	[]string{"mac"},
+)
+var promPacketsSent = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "receiver_packets_sent",
+	Help: "Total number of packets received",
+},
+	[]string{"mac"},
+)
+var promPacketsDropped = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "receiver_packets_dropped",
+	Help: "Total number of packets received",
+},
+	[]string{"mac"},
+)
 
 // server is used to implement helloworld.GreeterServer.
 type server struct {
@@ -61,25 +78,9 @@ func (s *server) GetCanvasParameters(ctx context.Context, req *empty.Empty) (*pb
 }
 
 func (s *server) MetricsUpdate(ctx context.Context, req *pb.MetricsDatapoint) (*empty.Empty, error) {
-	for _, e := range req.GetEntry() {
-		name := e.GetName()
-		lbls := make(prometheus.Labels)
-		lblnames := make([]string, len(e.GetLabel()))
-		for _, l := range e.GetLabel() {
-			lbls[l.GetName()] = l.GetValue()
-			lblnames = append(lblnames, l.GetName())
-		}
-
-		if _, ok := dynamicProm[name]; !ok {
-			dynamicProm[name] = promauto.NewGaugeVec(
-				prometheus.GaugeOpts{
-					Name: name,
-				},
-				lblnames)
-		}
-
-		dynamicProm[name].With(lbls).Set(float64(e.GetValueU64()))
-	}
+	promPacketsReceived.With(prometheus.Labels{"mac": req.GetMac()}).Set(float64(req.GetIpackets()))
+	promPacketsSent.With(prometheus.Labels{"mac": req.GetMac()}).Set(float64(req.GetOpackets()))
+	promPacketsDropped.With(prometheus.Labels{"mac": req.GetMac()}).Set(float64(req.GetDpackets()))
 	return &empty.Empty{}, nil
 }
 
