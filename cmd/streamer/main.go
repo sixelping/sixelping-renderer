@@ -1,0 +1,72 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"flag"
+	"image/png"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/sixelping/sixelping-renderer/pkg/mjpeg"
+	pb "github.com/sixelping/sixelping-renderer/pkg/sixelping_command"
+	"google.golang.org/grpc"
+)
+
+var listenFlag = flag.String("listen", ":8081", "Listen address")
+var rendererFlag = flag.String("renderer", "localhost:50051", "Renderer address")
+
+func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	parameters, err := client.GetCanvasParameters(ctx, &empty.Empty{})
+	if err != nil {
+		log.Fatalf("Failed to poll renderer parameters: %v", err)
+	}
+
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		response, err := client.GetRenderedImage(ctx, &empty.Empty{})
+		if err == nil {
+			bts := response.GetImage()
+			img, err := png.Decode(bytes.NewReader(bts))
+			if err == nil {
+				streamer.NewFrame(img)
+			} else {
+				log.Fatalf("Failed to decode image: %v", err)
+			}
+		} else {
+			log.Fatalf("Failed to poll renderer: %v", err)
+		}
+
+		time.Sleep(time.Second / time.Duration(int64(parameters.GetFps())))
+	}
+}
+
+func main() {
+	flag.Parse()
+	log.Println("Connecting to renderer...")
+	conn, err := grpc.Dial(*rendererFlag, grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		log.Fatalf("GRPC Fail: %v", err)
+	}
+	defer conn.Close()
+
+	streamer := mjpeg.NewStreamer()
+	defer streamer.Close()
+
+	log.Println("Starting poller...")
+	go poller(pb.NewSixelpingRendererClient(conn), streamer)
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<img src="/stream.mjpeg" />`))
+	})
+	http.HandleFunc("/stream.mjpeg", streamer.HandleHTTP)
+	log.Printf("Listening on %s!", *listenFlag)
+	log.Fatal(http.ListenAndServe(*listenFlag, nil))
+}
