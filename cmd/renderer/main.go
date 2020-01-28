@@ -34,24 +34,11 @@ var promDeltasReceived = promauto.NewCounter(prometheus.CounterOpts{
 	Name: "renderer_deltas_received_total",
 	Help: "Total number of received deltas",
 })
-var promPacketsReceived = promauto.NewGaugeVec(prometheus.GaugeOpts{
-	Name: "receiver_packets_received",
-	Help: "Total number of packets received",
-},
-	[]string{"mac"},
-)
-var promPacketsSent = promauto.NewGaugeVec(prometheus.GaugeOpts{
-	Name: "receiver_packets_sent",
-	Help: "Total number of packets received",
-},
-	[]string{"mac"},
-)
-var promPacketsDropped = promauto.NewGaugeVec(prometheus.GaugeOpts{
-	Name: "receiver_packets_dropped",
-	Help: "Total number of packets received",
-},
-	[]string{"mac"},
-)
+var promPacketsReceived *ReceiverMetric
+var promPacketsSent *ReceiverMetric
+var promPacketsDropped *ReceiverMetric
+var promBytesReceived *ReceiverMetric
+var promBytesSent *ReceiverMetric
 
 // server is used to implement helloworld.GreeterServer.
 type server struct {
@@ -78,9 +65,11 @@ func (s *server) GetCanvasParameters(ctx context.Context, req *empty.Empty) (*pb
 }
 
 func (s *server) MetricsUpdate(ctx context.Context, req *pb.MetricsDatapoint) (*empty.Empty, error) {
-	promPacketsReceived.With(prometheus.Labels{"mac": req.GetMac()}).Set(float64(req.GetIpackets()))
-	promPacketsSent.With(prometheus.Labels{"mac": req.GetMac()}).Set(float64(req.GetOpackets()))
-	promPacketsDropped.With(prometheus.Labels{"mac": req.GetMac()}).Set(float64(req.GetDpackets()))
+	promPacketsReceived.Set(req.GetMac(), req.GetIpackets())
+	promPacketsSent.Set(req.GetMac(), req.GetOpackets())
+	promPacketsDropped.Set(req.GetMac(), req.GetDpackets())
+	promBytesReceived.Set(req.GetMac(), req.GetIbytes())
+	promBytesSent.Set(req.GetMac(), req.GetObytes())
 	return &empty.Empty{}, nil
 }
 
@@ -103,6 +92,18 @@ func darkener() {
 }
 
 func setupMetrics() {
+	promPacketsReceived = NewReceiverMetric("receiver_packets_received", "Number of received packets")
+	promPacketsSent = NewReceiverMetric("receiver_packets_sent", "Number of sent packets")
+	promPacketsDropped = NewReceiverMetric("receiver_packets_dropped", "Number of dropped packets")
+	promBytesReceived = NewReceiverMetric("receiver_bytes_received", "Number of received bytes")
+	promBytesSent = NewReceiverMetric("receiver_bytes_sent", "Number of sent bytes")
+
+	prometheus.Register(promPacketsReceived)
+	prometheus.Register(promPacketsSent)
+	prometheus.Register(promPacketsDropped)
+	prometheus.Register(promBytesSent)
+	prometheus.Register(promBytesReceived)
+
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
 		http.ListenAndServe(*promListenFlag, nil)
