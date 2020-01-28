@@ -7,9 +7,11 @@ import (
 	"image/png"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/gorilla/handlers"
 	"github.com/sixelping/sixelping-renderer/pkg/mjpeg"
 	pb "github.com/sixelping/sixelping-renderer/pkg/sixelping_command"
 	"google.golang.org/grpc"
@@ -17,8 +19,9 @@ import (
 
 var listenFlag = flag.String("listen", ":8081", "Listen address")
 var rendererFlag = flag.String("renderer", "localhost:50051", "Renderer address")
+var canvasParameters *pb.CanvasParametersResponse
 
-func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
+func fetchParameters(client pb.SixelpingRendererClient) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
@@ -27,6 +30,10 @@ func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
 		log.Fatalf("Failed to poll renderer parameters: %v", err)
 	}
 
+	canvasParameters = parameters
+}
+
+func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -43,7 +50,7 @@ func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
 			log.Fatalf("Failed to poll renderer: %v", err)
 		}
 
-		time.Sleep(time.Second / time.Duration(int64(parameters.GetFps())))
+		time.Sleep(time.Second / time.Duration(int64(canvasParameters.GetFps())))
 	}
 }
 
@@ -59,14 +66,14 @@ func main() {
 	streamer := mjpeg.NewStreamer()
 	defer streamer.Close()
 
-	log.Println("Starting poller...")
-	go poller(pb.NewSixelpingRendererClient(conn), streamer)
+	client := pb.NewSixelpingRendererClient(conn)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`<img src="/stream.mjpeg" />`))
-	})
-	http.HandleFunc("/stream.mjpeg", streamer.HandleHTTP)
+	fetchParameters(client)
+	log.Println("Starting poller...")
+	go poller(client, streamer)
+
+	http.Handle("/", handlers.LoggingHandler(os.Stdout, http.HandlerFunc(pageHandler)))
+	http.Handle("/stream.mjpeg", handlers.LoggingHandler(os.Stdout, streamer))
 	log.Printf("Listening on %s!", *listenFlag)
 	log.Fatal(http.ListenAndServe(*listenFlag, nil))
 }

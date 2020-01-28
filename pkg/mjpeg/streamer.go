@@ -8,18 +8,20 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"sync"
 	"time"
 )
 
 //Based on https://github.com/mattn/go-mjpeg/blob/master/mjpeg.go
 
 type Streamer struct {
-	channel chan []byte
+	channels [](chan *[]byte)
+	mut      sync.Mutex
 }
 
 func NewStreamer() *Streamer {
 	return &Streamer{
-		channel: make(chan []byte),
+		channels: make([]chan *[]byte, 0),
 	}
 }
 
@@ -30,31 +32,75 @@ func (s *Streamer) NewFrame(frame image.Image) error {
 		return err
 	}
 	b := buf.Bytes()
-	s.channel <- b
+	s.sendFrame(&b)
 	return nil
 }
 
-func (s *Streamer) Close() {
-	close(s.channel)
+func (s *Streamer) sendFrame(data *[]byte) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	for _, c := range s.channels {
+		select {
+		case c <- data:
+		default:
+		}
+	}
 }
 
-func (s *Streamer) HandleHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Streamer) Close() {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	for _, c := range s.channels {
+		close(c)
+	}
+}
+
+func (s *Streamer) registerChannel(c chan *[]byte) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	s.channels = append(s.channels, c)
+}
+
+func (s *Streamer) unregisterChannel(c chan *[]byte) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	newChannels := make([]chan *[]byte, 0)
+	for _, d := range s.channels {
+		if d != c {
+			newChannels = append(newChannels, d)
+		}
+	}
+	s.channels = newChannels
+}
+
+func tryCloseChannel(c chan *[]byte) {
+	select {
+	case <-c:
+		close(c)
+	}
+}
+
+func (s *Streamer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := make(chan *[]byte)
+	defer tryCloseChannel(c)
+	s.registerChannel(c)
+	defer s.unregisterChannel(c)
 	m := multipart.NewWriter(w)
 	defer m.Close()
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+m.Boundary())
 	w.Header().Set("Connection", "close")
 	h := textproto.MIMEHeader{}
 	st := fmt.Sprint(time.Now().Unix())
-	for frame := range s.channel {
+	for frame := range c {
 		h.Set("Content-Type", "image/jpeg")
-		h.Set("Content-Length", fmt.Sprint(len(frame)))
+		h.Set("Content-Length", fmt.Sprint(len(*frame)))
 		h.Set("X-StartTime", st)
 		h.Set("X-TimeStamp", fmt.Sprint(time.Now().Unix()))
 		mw, err := m.CreatePart(h)
 		if err != nil {
 			break
 		}
-		_, err = mw.Write(frame)
+		_, err = mw.Write(*frame)
 		if err != nil {
 			break
 		}
