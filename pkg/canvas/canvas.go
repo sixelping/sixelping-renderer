@@ -77,7 +77,7 @@ func (c *Canvas) GetImage(now time.Time) (*image.RGBA, error) {
 		for y := 0; y < c.Height; y++ {
 			col := color.RGBA{}
 			dt := uint64(now.UnixNano()) - c.LastUpdated[y*c.Width+x]
-			fac := float64(1.0) - math.Min(float64(dt/c.PixelTimeoutNano), float64(1.0))
+			fac := float64(1.0) - math.Min(float64(dt)/float64(c.PixelTimeoutNano), float64(1.0))
 			col.A = 255
 
 			col.R = uint8(fac * float64(c.R[y*c.Width+x]))
