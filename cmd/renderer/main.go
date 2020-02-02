@@ -149,14 +149,17 @@ func overlayer() {
 			pps, err := queryPrometheus("sum(receiver_packets_received_per_second)", client)
 			if err != nil {
 				log.Printf("Prometheus overlay warning: %v", err)
+				continue
 			}
 			dps, err := queryPrometheus("sum(receiver_packets_dropped_per_second)", client)
 			if err != nil {
 				log.Printf("Prometheus overlay warning: %v", err)
+				continue
 			}
 			bps, err := queryPrometheus("sum(receiver_bits_received_per_second)", client)
 			if err != nil {
 				log.Printf("Prometheus overlay warning: %v", err)
+				continue
 			}
 
 			x := 10
