@@ -150,6 +150,10 @@ func overlayer() {
 			if err != nil {
 				log.Printf("Prometheus overlay warning: %v", err)
 			}
+			dps, err := queryPrometheus("sum(receiver_packets_dropped_per_second)", client)
+			if err != nil {
+				log.Printf("Prometheus overlay warning: %v", err)
+			}
 			bps, err := queryPrometheus("sum(receiver_bits_received_per_second)", client)
 			if err != nil {
 				log.Printf("Prometheus overlay warning: %v", err)
@@ -164,6 +168,10 @@ func overlayer() {
 
 			text := fmt.Sprintf("%.02f Mpps | %.02f Gbps", pps/1000000.0, bps/1000000000.0)
 			col := color.RGBA{255, 255, 255, 255}
+			if dps > 0 {
+				col = color.RGBA{255, 0, 0, 255}
+				text = fmt.Sprintf("%s | Sixelping is currently overloaded and is dropping some of your pings", text)
+			}
 			point := fixed.Point26_6{fixed.Int26_6(x * 64), fixed.Int26_6(y * 64)}
 
 			d := &font.Drawer{
