@@ -5,8 +5,6 @@ import (
 	"context"
 	"flag"
 	"image"
-	"image/color"
-	"image/draw"
 	"log"
 	"net"
 	"net/http"
@@ -16,20 +14,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	canvaspkg "github.com/sixelping/sixelping-renderer/pkg/canvas"
 	pb "github.com/sixelping/sixelping-renderer/pkg/sixelping_command"
 	utils "github.com/sixelping/sixelping-renderer/pkg/sixelping_utils"
 	"google.golang.org/grpc"
 )
 
-var canvas *image.RGBA
+var canvas *canvaspkg.Canvas
 var widthFlag = flag.Int("width", 1920, "Canvas Width")
 var heightFlag = flag.Int("height", 1080, "Canvas Height")
 var fpsFlag = flag.Int("fps", 1, "Canvas FPS")
+var pixTimeoutFlag = flag.Float64("pixeltime", 1.0, "Canvas pixel timeout in seconds")
 var listenFlag = flag.String("listen", ":50051", "Listen address")
 var promListenFlag = flag.String("mlisten", ":50052", "Metrics listen address")
-var dpsFlag = flag.Float64("dps", 0.1, "Darkens per second")
-var dinFlag = flag.Int("dint", 16, "Darken intensity")
-var binFlag = flag.Int("bint", 8, "Brighten intensity")
 var promDeltasReceived = promauto.NewCounter(prometheus.CounterOpts{
 	Name: "renderer_deltas_received_total",
 	Help: "Total number of received deltas",
@@ -51,9 +48,11 @@ func (s *server) NewDeltaImage(ctx context.Context, req *pb.NewDeltaImageRequest
 		log.Printf("Decoding error: %s", err)
 		return nil, err
 	}
-	mask := image.NewUniform(color.Alpha{uint8(*binFlag)})
 
-	draw.DrawMask(canvas, canvas.Bounds(), img, image.ZP, mask, image.ZP, draw.Over)
+	err = canvas.AddDelta(img)
+	if err != nil {
+		return nil, err
+	}
 
 	promDeltasReceived.Inc()
 	return &empty.Empty{}, nil
@@ -74,21 +73,15 @@ func (s *server) MetricsUpdate(ctx context.Context, req *pb.MetricsDatapoint) (*
 }
 
 func (s *server) GetRenderedImage(ctx context.Context, req *empty.Empty) (*pb.RenderedImageResponse, error) {
-	return &pb.RenderedImageResponse{Image: utils.ImageToBytes(canvas)}, nil
+	img, err := canvas.GetImage(time.Now())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.RenderedImageResponse{Image: utils.ImageToBytes(img)}, nil
 }
 
 func setupCanvas() {
-	canvas = utils.BlackImage(*widthFlag, *heightFlag)
-	go darkener()
-}
-
-func darkener() {
-	black := utils.BlackImage(*widthFlag, *heightFlag)
-	mask := image.NewUniform(color.Alpha{uint8(*dinFlag)})
-	for {
-		draw.DrawMask(canvas, canvas.Bounds(), black, image.ZP, mask, image.ZP, draw.Over)
-		time.Sleep(time.Duration(float64(time.Second) / (*dpsFlag)))
-	}
+	canvas = canvaspkg.NewCanvas(*widthFlag, *heightFlag, uint64((*pixTimeoutFlag)*1000000000))
 }
 
 func setupMetrics() {
