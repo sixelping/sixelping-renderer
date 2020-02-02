@@ -3,8 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
+	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"log"
 	"net"
@@ -13,12 +16,18 @@ import (
 	"time"
 
 	empty "github.com/golang/protobuf/ptypes/empty"
+	"github.com/prometheus/client_golang/api"
+	"github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/model"
 	canvaspkg "github.com/sixelping/sixelping-renderer/pkg/canvas"
 	pb "github.com/sixelping/sixelping-renderer/pkg/sixelping_command"
 	utils "github.com/sixelping/sixelping-renderer/pkg/sixelping_utils"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/math/fixed"
 	"google.golang.org/grpc"
 )
 
@@ -30,6 +39,7 @@ var pixTimeoutFlag = flag.Float64("pixeltime", 1.0, "Canvas pixel timeout in sec
 var listenFlag = flag.String("listen", ":50051", "Listen address")
 var promListenFlag = flag.String("mlisten", ":50052", "Metrics listen address")
 var logoFlag = flag.String("logo", "", "Logo file")
+var promServerFlag = flag.String("prom", "", "Prometheus endpoint to query")
 var promDeltasReceived = promauto.NewCounter(prometheus.CounterOpts{
 	Name: "renderer_deltas_received_total",
 	Help: "Total number of received deltas",
@@ -83,11 +93,44 @@ func (s *server) GetRenderedImage(ctx context.Context, req *empty.Empty) (*pb.Re
 	return &pb.RenderedImageResponse{Image: utils.ImageToBytes(img)}, nil
 }
 
+func queryPrometheus(q string, client api.Client) (float64, error) {
+	v1api := v1.NewAPI(client)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	result, warnings, err := v1api.Query(ctx, q, time.Now())
+	if err != nil {
+		return 0, err
+	}
+	if len(warnings) > 0 {
+		return 0, errors.New(fmt.Sprintf("Warning: %v", warnings))
+	}
+	if vec, ok := result.(model.Vector); ok {
+		if vec.Len() > 0 {
+			return float64(vec[0].Value), nil
+		} else {
+			return 0, errors.New("No data")
+		}
+	}
+	return 0, errors.New("Invalid result type")
+}
+
 func overlayer() {
 	var logoImage image.Image
+	var client api.Client
 	logoImage = nil
+	client = nil
 	if *logoFlag != "" {
 		logoImage = readLogo()
+	}
+
+	if *promServerFlag != "" {
+		var err error
+		client, err = api.NewClient(api.Config{
+			Address: *promServerFlag,
+		})
+		if err != nil {
+			log.Fatalf("Error creating client: %v\n", err)
+		}
 	}
 
 	for {
@@ -100,6 +143,36 @@ func overlayer() {
 
 		if logoImage != nil {
 			draw.Draw(overlay, logoImage.Bounds().Add(image.Point{10, *heightFlag - (logoImage.Bounds().Max.Y + 10)}), logoImage, image.ZP, draw.Over)
+		}
+
+		if client != nil {
+			pps, err := queryPrometheus("sum(receiver_packets_received_per_second)", client)
+			if err != nil {
+				log.Printf("Prometheus overlay warning: %v", err)
+			}
+			bps, err := queryPrometheus("sum(receiver_bits_received_per_second)", client)
+			if err != nil {
+				log.Printf("Prometheus overlay warning: %v", err)
+			}
+
+			x := 10
+			y := *heightFlag - 10
+
+			if logoImage != nil {
+				x = x + logoImage.Bounds().Max.X + 10
+			}
+
+			text := fmt.Sprintf("%.02f Mpps | %.02f Gbps", pps/1000000.0, bps/1000000000.0)
+			col := color.RGBA{255, 255, 255, 255}
+			point := fixed.Point26_6{fixed.Int26_6(x * 64), fixed.Int26_6(y * 64)}
+
+			d := &font.Drawer{
+				Dst:  overlay,
+				Src:  image.NewUniform(col),
+				Face: basicfont.Face7x13,
+				Dot:  point,
+			}
+			d.DrawString(text)
 		}
 
 		canvas.SetOverlayImage(overlay)
