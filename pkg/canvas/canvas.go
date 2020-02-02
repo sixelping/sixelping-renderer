@@ -80,7 +80,7 @@ func (c *Canvas) GetImage(now time.Time) (*image.RGBA, error) {
 			fac := float64(1.0) - math.Min(float64(dt)/float64(c.PixelTimeoutNano), float64(1.0))
 
 			//If pixel is newer than now, draw it fully
-			if dt <= 0 {
+			if c.LastUpdated[y*c.Width+x] > uint64(now.UnixNano()) {
 				fac = float64(1.0)
 			}
 
