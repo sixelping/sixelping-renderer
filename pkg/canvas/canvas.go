@@ -89,7 +89,9 @@ func (c *Canvas) GetImage(now time.Time) (*image.RGBA, error) {
 	}
 
 	// Add overlay image ontop
-	draw.Draw(img, c.overlay.Bounds(), c.overlay, image.ZP, draw.Over)
+	if c.overlay != nil {
+		draw.Draw(img, c.overlay.Bounds(), c.overlay, image.ZP, draw.Over)
+	}
 
 	return img, nil
 }
