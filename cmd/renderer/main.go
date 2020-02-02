@@ -5,9 +5,11 @@ import (
 	"context"
 	"flag"
 	"image"
+	"image/draw"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	empty "github.com/golang/protobuf/ptypes/empty"
@@ -27,6 +29,7 @@ var fpsFlag = flag.Int("fps", 1, "Canvas FPS")
 var pixTimeoutFlag = flag.Float64("pixeltime", 1.0, "Canvas pixel timeout in seconds")
 var listenFlag = flag.String("listen", ":50051", "Listen address")
 var promListenFlag = flag.String("mlisten", ":50052", "Metrics listen address")
+var logoFlag = flag.String("logo", "", "Logo file")
 var promDeltasReceived = promauto.NewCounter(prometheus.CounterOpts{
 	Name: "renderer_deltas_received_total",
 	Help: "Total number of received deltas",
@@ -80,8 +83,50 @@ func (s *server) GetRenderedImage(ctx context.Context, req *empty.Empty) (*pb.Re
 	return &pb.RenderedImageResponse{Image: utils.ImageToBytes(img)}, nil
 }
 
+func overlayer() {
+	var logoImage image.Image
+	logoImage = nil
+	if *logoFlag != "" {
+		logoImage = readLogo()
+	}
+
+	for {
+		overlay := image.NewRGBA(image.Rect(0, 0, *widthFlag, *heightFlag))
+		for y := 0; y < *heightFlag; y++ {
+			for x := 0; x < *widthFlag; x++ {
+				overlay.Set(x, y, image.Transparent)
+			}
+		}
+
+		if logoImage != nil {
+			draw.Draw(overlay, logoImage.Bounds().Add(image.Point{10, *heightFlag - (logoImage.Bounds().Max.Y + 10)}), logoImage, image.ZP, draw.Over)
+		}
+
+		canvas.SetOverlayImage(overlay)
+		time.Sleep(time.Second)
+	}
+}
+
+func readLogo() image.Image {
+	imageFile, err := os.Open(*logoFlag)
+	if err != nil {
+		log.Fatalf("Failed to open logo: %v", err)
+	}
+	defer imageFile.Close()
+
+	img, _, err := image.Decode(imageFile)
+	if err != nil {
+		log.Fatalf("Failed to decode logo: %v", err)
+	}
+
+	log.Printf("Loaded a %dx%d logo.", img.Bounds().Max.X, img.Bounds().Max.Y)
+
+	return img
+}
+
 func setupCanvas() {
 	canvas = canvaspkg.NewCanvas(*widthFlag, *heightFlag, uint64((*pixTimeoutFlag)*1000000000))
+	go overlayer()
 }
 
 func setupMetrics() {
