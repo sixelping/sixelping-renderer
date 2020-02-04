@@ -32,6 +32,8 @@ func fetchParameters(client pb.SixelpingRendererClient) {
 }
 
 func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
+	psd := time.Second / time.Duration(int64(canvasParameters.GetFps()))
+	nextTime := time.Now()
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -43,7 +45,8 @@ func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
 			log.Fatalf("Failed to poll renderer: %v", err)
 		}
 
-		time.Sleep(time.Second / time.Duration(int64(canvasParameters.GetFps())))
+		nextTime = nextTime.Add(psd)
+		time.Sleep(time.Until(nextTime))
 	}
 }
 
