@@ -13,7 +13,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime/pprof"
+	"syscall"
 	"time"
 
 	empty "github.com/golang/protobuf/ptypes/empty"
@@ -237,6 +239,17 @@ func setupMetrics() {
 
 }
 
+func setupCloseHandler() {
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("\r- Ctrl+C pressed in Terminal")
+		pprof.StopCPUProfile()
+		os.Exit(0)
+	}()
+}
+
 func main() {
 	flag.Parse()
 	if *cpuprofile != "" {
@@ -245,6 +258,7 @@ func main() {
 			log.Fatal(err)
 		}
 		pprof.StartCPUProfile(f)
+		setupCloseHandler()
 		defer pprof.StopCPUProfile()
 	}
 	setupMetrics()
