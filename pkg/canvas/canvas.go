@@ -4,7 +4,6 @@ import (
 	"errors"
 	"image"
 	"image/draw"
-	"math"
 	"sync"
 	"time"
 )
@@ -49,6 +48,8 @@ func (c *Canvas) AddDelta(deltaImage image.Image) error {
 		return errors.New("Invalid width/height")
 	}
 
+	now := uint64(time.Now().UnixNano())
+
 	c.mut.Lock()
 	defer c.mut.Unlock()
 	for x := 0; x < c.Width; x++ {
@@ -59,7 +60,7 @@ func (c *Canvas) AddDelta(deltaImage image.Image) error {
 				c.R[y*c.Width+x] = uint8((r * 0xFF) / 0xFFFF)
 				c.G[y*c.Width+x] = uint8((g * 0xFF) / 0xFFFF)
 				c.B[y*c.Width+x] = uint8((b * 0xFF) / 0xFFFF)
-				c.LastUpdated[y*c.Width+x] = uint64(time.Now().UnixNano())
+				c.LastUpdated[y*c.Width+x] = now
 			}
 		}
 	}
@@ -72,20 +73,28 @@ func (c *Canvas) drawImage(now uint64, img *image.RGBA) error {
 	defer c.mut.Unlock()
 	for x := 0; x < c.Width; x++ {
 		for y := 0; y < c.Height; y++ {
-			dt := now - c.LastUpdated[y*c.Width+x]
-			fac := float64(1.0) - math.Min(float64(dt)/float64(c.PixelTimeoutNano), float64(1.0))
+			lu := c.LastUpdated[y*c.Width+x]
+			dt := now - lu
 
-			//If pixel is newer than now, draw it fully
+			fac := float32(0.0)
 			if c.LastUpdated[y*c.Width+x] > now {
-				fac = float64(1.0)
+				//If pixel is newer than now, draw it fully
+				fac = float32(1.0)
+			} else {
+				//Calculate darkness
+				fac = float32(1.0) - (float32(dt) / float32(c.PixelTimeoutNano))
+
+				if fac < 0.0 {
+					fac = float32(0.0)
+				}
 			}
 
 			index := (y-img.Rect.Min.Y)*img.Stride + (x-img.Rect.Min.X)*4
 
 			if fac > 0.0 {
-				img.Pix[index] = uint8(fac * float64(c.R[y*c.Width+x]))
-				img.Pix[index+1] = uint8(fac * float64(c.G[y*c.Width+x]))
-				img.Pix[index+2] = uint8(fac * float64(c.B[y*c.Width+x]))
+				img.Pix[index] = uint8(fac * float32(c.R[y*c.Width+x]))
+				img.Pix[index+1] = uint8(fac * float32(c.G[y*c.Width+x]))
+				img.Pix[index+2] = uint8(fac * float32(c.B[y*c.Width+x]))
 			} else {
 				img.Pix[index] = 0
 				img.Pix[index+1] = 0
