@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"flag"
-	"image/jpeg"
 	"log"
 	"net/http"
 	"os"
@@ -40,12 +38,7 @@ func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
 		response, err := client.GetRenderedImage(ctx, &empty.Empty{})
 		if err == nil {
 			bts := response.GetImage()
-			img, err := jpeg.Decode(bytes.NewReader(bts))
-			if err == nil {
-				streamer.NewFrame(img)
-			} else {
-				log.Fatalf("Failed to decode image: %v", err)
-			}
+			streamer.NewFrame(&bts)
 		} else {
 			log.Fatalf("Failed to poll renderer: %v", err)
 		}

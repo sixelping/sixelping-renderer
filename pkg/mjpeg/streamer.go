@@ -1,10 +1,7 @@
 package mjpeg
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	"image/jpeg"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -25,14 +22,8 @@ func NewStreamer() *Streamer {
 	}
 }
 
-func (s *Streamer) NewFrame(frame image.Image) error {
-	buf := new(bytes.Buffer)
-	err := jpeg.Encode(buf, frame, nil)
-	if err != nil {
-		return err
-	}
-	b := buf.Bytes()
-	s.sendFrame(&b)
+func (s *Streamer) NewFrame(frame *[]byte) error {
+	s.sendFrame(frame)
 	return nil
 }
 
