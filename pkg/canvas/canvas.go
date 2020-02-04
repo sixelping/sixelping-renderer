@@ -3,7 +3,6 @@ package canvas
 import (
 	"errors"
 	"image"
-	"image/color"
 	"image/draw"
 	"math"
 	"sync"
@@ -75,7 +74,6 @@ func (c *Canvas) GetImage(now time.Time) (*image.RGBA, error) {
 	defer c.mut.Unlock()
 	for x := 0; x < c.Width; x++ {
 		for y := 0; y < c.Height; y++ {
-			col := color.RGBA{}
 			dt := uint64(now.UnixNano()) - c.LastUpdated[y*c.Width+x]
 			fac := float64(1.0) - math.Min(float64(dt)/float64(c.PixelTimeoutNano), float64(1.0))
 
@@ -84,13 +82,12 @@ func (c *Canvas) GetImage(now time.Time) (*image.RGBA, error) {
 				fac = float64(1.0)
 			}
 
-			col.A = 255
+			index := (y-img.Rect.Min.Y)*img.Stride + (x-img.Rect.Min.X)*4
 
-			col.R = uint8(fac * float64(c.R[y*c.Width+x]))
-			col.G = uint8(fac * float64(c.G[y*c.Width+x]))
-			col.B = uint8(fac * float64(c.B[y*c.Width+x]))
-
-			img.SetRGBA(x, y, col)
+			img.Pix[index] = uint8(fac * float64(c.R[y*c.Width+x]))
+			img.Pix[index+1] = uint8(fac * float64(c.G[y*c.Width+x]))
+			img.Pix[index+2] = uint8(fac * float64(c.B[y*c.Width+x]))
+			img.Pix[index+3] = 255
 		}
 	}
 
