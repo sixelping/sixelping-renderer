@@ -4,7 +4,6 @@ import (
 	"errors"
 	"image"
 	"image/draw"
-	"sync"
 	"time"
 )
 
@@ -15,7 +14,6 @@ type Canvas struct {
 	LastUpdated      []uint64
 	Width            int
 	Height           int
-	mut              sync.Mutex
 	overlay          image.Image
 	PixelTimeoutNano uint64
 }
@@ -36,8 +34,6 @@ func (c *Canvas) SetOverlayImage(img image.Image) error {
 	if img.Bounds().Max.X != c.Width || img.Bounds().Max.Y != c.Height {
 		return errors.New("Invalid width/height")
 	}
-	c.mut.Lock()
-	defer c.mut.Unlock()
 	c.overlay = img
 
 	return nil
@@ -46,8 +42,6 @@ func (c *Canvas) SetOverlayImage(img image.Image) error {
 func (c *Canvas) AddDelta(deltaImage []byte) error {
 	now := uint64(time.Now().UnixNano())
 
-	c.mut.Lock()
-	defer c.mut.Unlock()
 	for x := 0; x < c.Width; x++ {
 		for y := 0; y < c.Height; y++ {
 			i := (y*(c.Width) + x) * 4
@@ -65,8 +59,6 @@ func (c *Canvas) AddDelta(deltaImage []byte) error {
 }
 
 func (c *Canvas) drawImage(now uint64, img *image.RGBA) error {
-	c.mut.Lock()
-	defer c.mut.Unlock()
 	for x := 0; x < c.Width; x++ {
 		for y := 0; y < c.Height; y++ {
 			lu := c.LastUpdated[y*c.Width+x]
