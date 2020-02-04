@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime/pprof"
 	"time"
 
 	empty "github.com/golang/protobuf/ptypes/empty"
@@ -51,6 +52,7 @@ var promPacketsDropped *ReceiverMetric
 var promBytesReceived *ReceiverMetric
 var promBytesSent *ReceiverMetric
 var promPingsReceived *ReceiverPerClientMetric
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 // server is used to implement helloworld.GreeterServer.
 type server struct {
@@ -237,6 +239,14 @@ func setupMetrics() {
 
 func main() {
 	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 	setupMetrics()
 	setupCanvas()
 	lis, err := net.Listen("tcp", *listenFlag)
