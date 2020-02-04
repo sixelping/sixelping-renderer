@@ -43,23 +43,19 @@ func (c *Canvas) SetOverlayImage(img image.Image) error {
 	return nil
 }
 
-func (c *Canvas) AddDelta(deltaImage image.Image) error {
-	if deltaImage.Bounds().Max.X != c.Width || deltaImage.Bounds().Max.Y != c.Height {
-		return errors.New("Invalid width/height")
-	}
-
+func (c *Canvas) AddDelta(deltaImage []byte) error {
 	now := uint64(time.Now().UnixNano())
 
 	c.mut.Lock()
 	defer c.mut.Unlock()
 	for x := 0; x < c.Width; x++ {
 		for y := 0; y < c.Height; y++ {
-			col := deltaImage.At(x, y)
-			r, g, b, a := col.RGBA()
+			i := (y*(c.Width) + x) * 4
+			r, g, b, a := deltaImage[i+2], deltaImage[i+1], deltaImage[i], deltaImage[i+3]
 			if a > 0 {
-				c.R[y*c.Width+x] = uint8((r * 0xFF) / 0xFFFF)
-				c.G[y*c.Width+x] = uint8((g * 0xFF) / 0xFFFF)
-				c.B[y*c.Width+x] = uint8((b * 0xFF) / 0xFFFF)
+				c.R[y*c.Width+x] = r
+				c.G[y*c.Width+x] = g
+				c.B[y*c.Width+x] = b
 				c.LastUpdated[y*c.Width+x] = now
 			}
 		}
