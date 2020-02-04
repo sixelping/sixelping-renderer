@@ -67,7 +67,7 @@ func (s *server) NewDeltaImage(ctx context.Context, req *pb.NewDeltaImageRequest
 	buf := req.GetImage()
 	for y := 0; y < *heightFlag; y++ {
 		for x := 0; x < *widthFlag; x++ {
-			i := y*(*widthFlag) + x
+			i := (y*(*widthFlag) + x) * 4
 			img.SetRGBA(x, y, color.RGBA{buf[i+2], buf[i+1], buf[i], buf[i+3]})
 		}
 	}
