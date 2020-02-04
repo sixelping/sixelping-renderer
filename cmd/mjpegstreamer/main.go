@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
-	"image/png"
+	"image/jpeg"
 	"log"
 	"net/http"
 	"os"
@@ -40,7 +40,7 @@ func poller(client pb.SixelpingRendererClient, streamer *mjpeg.Streamer) {
 		response, err := client.GetRenderedImage(ctx, &empty.Empty{})
 		if err == nil {
 			bts := response.GetImage()
-			img, err := png.Decode(bytes.NewReader(bts))
+			img, err := jpeg.Decode(bytes.NewReader(bts))
 			if err == nil {
 				streamer.NewFrame(img)
 			} else {

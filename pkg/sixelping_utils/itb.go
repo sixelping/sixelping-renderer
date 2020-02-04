@@ -5,12 +5,12 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"image/png"
+	"image/jpeg"
 )
 
 func ImageToBytes(img image.Image) []byte {
 	buffer := new(bytes.Buffer)
-	png.Encode(buffer, img)
+	jpeg.Encode(buffer, img, nil)
 	return buffer.Bytes()
 }
 
