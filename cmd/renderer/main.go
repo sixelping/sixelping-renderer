@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"image/png"
 	"log"
 	"net"
 	"net/http"
@@ -207,7 +208,7 @@ func readLogo() image.Image {
 	}
 	defer imageFile.Close()
 
-	img, _, err := image.Decode(imageFile)
+	img, err := png.Decode(imageFile)
 	if err != nil {
 		log.Fatalf("Failed to decode logo: %v", err)
 	}
