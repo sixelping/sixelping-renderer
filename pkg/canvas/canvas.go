@@ -67,28 +67,42 @@ func (c *Canvas) AddDelta(deltaImage image.Image) error {
 	return nil
 }
 
-func (c *Canvas) GetImage(now time.Time) (*image.RGBA, error) {
-	img := image.NewRGBA(image.Rectangle{image.Point{0, 0}, image.Point{c.Width, c.Height}})
-
+func (c *Canvas) drawImage(now uint64, img *image.RGBA) error {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 	for x := 0; x < c.Width; x++ {
 		for y := 0; y < c.Height; y++ {
-			dt := uint64(now.UnixNano()) - c.LastUpdated[y*c.Width+x]
+			dt := now - c.LastUpdated[y*c.Width+x]
 			fac := float64(1.0) - math.Min(float64(dt)/float64(c.PixelTimeoutNano), float64(1.0))
 
 			//If pixel is newer than now, draw it fully
-			if c.LastUpdated[y*c.Width+x] > uint64(now.UnixNano()) {
+			if c.LastUpdated[y*c.Width+x] > now {
 				fac = float64(1.0)
 			}
 
 			index := (y-img.Rect.Min.Y)*img.Stride + (x-img.Rect.Min.X)*4
 
-			img.Pix[index] = uint8(fac * float64(c.R[y*c.Width+x]))
-			img.Pix[index+1] = uint8(fac * float64(c.G[y*c.Width+x]))
-			img.Pix[index+2] = uint8(fac * float64(c.B[y*c.Width+x]))
+			if fac > 0.0 {
+				img.Pix[index] = uint8(fac * float64(c.R[y*c.Width+x]))
+				img.Pix[index+1] = uint8(fac * float64(c.G[y*c.Width+x]))
+				img.Pix[index+2] = uint8(fac * float64(c.B[y*c.Width+x]))
+			} else {
+				img.Pix[index] = 0
+				img.Pix[index+1] = 0
+				img.Pix[index+2] = 0
+			}
 			img.Pix[index+3] = 255
 		}
+	}
+	return nil
+}
+
+func (c *Canvas) GetImage(now time.Time) (*image.RGBA, error) {
+	img := image.NewRGBA(image.Rectangle{image.Point{0, 0}, image.Point{c.Width, c.Height}})
+
+	err := c.drawImage(uint64(now.UnixNano()), img)
+	if err != nil {
+		return nil, err
 	}
 
 	// Add overlay image ontop
