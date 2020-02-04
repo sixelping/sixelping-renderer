@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -63,13 +62,17 @@ type server struct {
 }
 
 func (s *server) NewDeltaImage(ctx context.Context, req *pb.NewDeltaImageRequest) (*empty.Empty, error) {
-	img, _, err := image.Decode(bytes.NewReader(req.GetImage()))
-	if err != nil {
-		log.Printf("Decoding error: %s", err)
-		return nil, err
+	img := image.NewRGBA(image.Rect(0, 0, *widthFlag, *heightFlag))
+
+	buf := req.GetImage()
+	for y := 0; y < *heightFlag; y++ {
+		for x := 0; x < *widthFlag; x++ {
+			i := y*(*widthFlag) + x
+			img.SetRGBA(x, y, color.RGBA{buf[i+2], buf[i+1], buf[i], buf[i+3]})
+		}
 	}
 
-	err = canvas.AddDelta(img)
+	err := canvas.AddDelta(img)
 	if err != nil {
 		return nil, err
 	}
