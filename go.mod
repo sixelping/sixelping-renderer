@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/golang/protobuf v1.3.3
 	github.com/gorilla/handlers v1.4.2
+	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/prometheus/client_golang v1.4.0
 	github.com/prometheus/common v0.9.1
 	golang.org/x/image v0.0.0-20200119044424-58c23975cae1

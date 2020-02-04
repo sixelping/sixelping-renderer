@@ -16,6 +16,7 @@ import (
 	"time"
 
 	empty "github.com/golang/protobuf/ptypes/empty"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -232,10 +233,6 @@ func setupMetrics() {
 	prometheus.Register(promBytesReceived)
 	prometheus.Register(promPingsReceived)
 
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(*promListenFlag, nil)
-	}()
 }
 
 func main() {
@@ -246,9 +243,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
+		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
+	)
 	pb.RegisterSixelpingRendererServer(s, &server{})
+	grpc_prometheus.EnableHandlingTimeHistogram()
+	grpc_prometheus.Register(s)
 	log.Println("Serving requests...")
+
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		http.ListenAndServe(*promListenFlag, nil)
+	}()
+
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
