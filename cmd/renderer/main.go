@@ -274,6 +274,8 @@ func main() {
 	s := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
 		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
+		grpc.MaxRecvMsgSize(64000000),
+		grpc.MaxSendMsgSize(64000000),
 	)
 	pb.RegisterSixelpingRendererServer(s, &server{})
 	grpc_prometheus.EnableHandlingTimeHistogram()
