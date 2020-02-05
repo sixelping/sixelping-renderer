@@ -96,6 +96,51 @@ func (s *server) GetRenderedImage(ctx context.Context, req *empty.Empty) (*pb.Re
 	return &pb.RenderedImageResponse{Image: utils.ImageToBytes(img)}, nil
 }
 
+func handleTcp(conn net.Conn) {
+	psd := time.Second / time.Duration(int64(*fpsFlag))
+	nextTime := time.Now()
+	for {
+		img, err := canvas.GetImage(time.Now())
+		if err != nil {
+			log.Printf("Error transmitting: %v", err)
+			return
+		}
+
+		buf := make([]byte, (*widthFlag)*(*heightFlag)*3)
+		bufI := 0
+		for i := 0; i < len(img.Pix); i++ {
+			if (i % 4) != 3 {
+				buf[bufI] = img.Pix[i]
+				bufI++
+			}
+		}
+
+		conn.Write(buf)
+
+		nextTime = nextTime.Add(psd)
+		time.Sleep(time.Until(nextTime))
+	}
+
+}
+
+func tcpListener() error {
+	l, err := net.Listen("tcp", ":12345")
+	if err != nil {
+		return err
+	}
+
+	defer l.Close()
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return err
+		}
+
+		go handleTcp(conn)
+	}
+}
+
 func queryPrometheus(q string, client api.Client) (float64, error) {
 	v1api := v1.NewAPI(client)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -257,6 +302,7 @@ func main() {
 	}
 	setupMetrics()
 	setupCanvas()
+	go tcpListener()
 	lis, err := net.Listen("tcp", *listenFlag)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
