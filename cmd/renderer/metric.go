@@ -1,10 +1,15 @@
 package main
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 type ReceiverMetric struct {
 	counterDesc *prometheus.Desc
 	values      map[string]uint64
+	mut         sync.Mutex
 }
 
 type MacIPPair struct {
@@ -14,6 +19,7 @@ type MacIPPair struct {
 type ReceiverPerClientMetric struct {
 	counterDesc *prometheus.Desc
 	values      map[MacIPPair]uint64
+	mut         sync.Mutex
 }
 
 func (c *ReceiverMetric) Describe(ch chan<- *prometheus.Desc) {
@@ -25,6 +31,8 @@ func (c *ReceiverPerClientMetric) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *ReceiverMetric) Collect(ch chan<- prometheus.Metric) {
+	c.mut.Lock()
+	defer c.mut.Unlock()
 	for k, v := range c.values {
 		ch <- prometheus.MustNewConstMetric(
 			c.counterDesc,
@@ -36,6 +44,8 @@ func (c *ReceiverMetric) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (c *ReceiverPerClientMetric) Collect(ch chan<- prometheus.Metric) {
+	c.mut.Lock()
+	defer c.mut.Unlock()
 	for k, v := range c.values {
 		ch <- prometheus.MustNewConstMetric(
 			c.counterDesc,
@@ -48,10 +58,14 @@ func (c *ReceiverPerClientMetric) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (c *ReceiverMetric) Set(mac string, value uint64) {
+	c.mut.Lock()
+	defer c.mut.Unlock()
 	c.values[mac] = value
 }
 
 func (c *ReceiverPerClientMetric) Set(mac string, ip string, value uint64) {
+	c.mut.Lock()
+	defer c.mut.Unlock()
 	c.values[MacIPPair{mac, ip}] = value
 }
 
